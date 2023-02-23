@@ -67,17 +67,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             (W as u32, H as u32),
         )?
         .into_drawing_area();
-        root.fill(&BLACK)?;
+        root.fill(&WHITE)?;
 
         let mut chart = ChartBuilder::on(&root)
             .margin(10)
             .set_all_label_area_size(30)
-            .build_cartesian_2d(0..250u128, 0u128..40_000u128)?;
+            .caption(
+                "Monthly Average Temperate in Salt Lake City, UT",
+            ("sans-serif", 40),
+            )
+            .build_cartesian_2d(0..250u128, 0f64..40f64)?;
 
         chart
             .configure_mesh()
-            .label_style(("sans-serif", 15).into_font().color(&GREEN))
-            .axis_style(&GREEN)
+            .label_style(("sans-serif", 15).into_font().color(&BLACK))
+            .axis_style(&BLACK)
             .draw()?;
 
         let cs = chart.into_chart_state();
@@ -119,25 +123,30 @@ fn main() -> Result<(), Box<dyn Error>> {
             .into_drawing_area();
             {
                 let mut chart = cs.clone().restore(&root);
-                chart.plotting_area().fill(&BLACK).unwrap();
-
+                chart.plotting_area().fill(&WHITE).unwrap();
                 chart
                     .configure_mesh()
-                    .bold_line_style(&GREEN.mix(0.2))
+                    .bold_line_style(&BLACK.mix(0.2))
                     .light_line_style(&TRANSPARENT)
                     .draw()
                     .unwrap();
 
                 let data_clone = data.lock().unwrap().clone();
+                let mut counter = Duration::from_millis(0);
+                let in_last_second: Vec<&Duration> = data_clone.iter().rev().take_while(move |&value| {
+                    counter += *value;
+                    counter < Duration::from_secs(1)
+                }).collect();
+                window.set_title(format!("{} ticks", in_last_second.len()).borrow());
                 chart
                     .draw_series(LineSeries::new(
                         data_clone
                             .iter()
                             .enumerate()
-                            .map(|(i, duration)| return (i as u128 % 1000, duration.as_micros())),
+                            .map(|(i, duration)| return (i as u128 % 1000, duration.as_micros() as f64 / 1000f64)),
                         RED,
                     ))
-                    .unwrap();
+                    .unwrap().label("toto");
             }
         }
 
