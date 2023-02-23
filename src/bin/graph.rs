@@ -1,8 +1,3 @@
-use minifb::{Key, KeyRepeat, Window, WindowOptions};
-use plotters::prelude::*;
-use plotters_bitmap::bitmap_pixel::BGRXPixel;
-use plotters_bitmap::BitMapBackend;
-use rdev::{listen, Event};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::VecDeque;
 use std::error::Error;
@@ -10,6 +5,13 @@ use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+
+use minifb::{Key, KeyRepeat, Window, WindowOptions};
+use plotters::prelude::*;
+use plotters_bitmap::bitmap_pixel::BGRXPixel;
+use plotters_bitmap::BitMapBackend;
+use rdev::{Event, listen};
+
 const W: usize = 800;
 const H: usize = 600;
 
@@ -49,15 +51,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut previous_time: SystemTime = SystemTime::now();
     let data = Arc::new(Mutex::new(VecDeque::with_capacity(BUFFER_SIZE)));
 
-    // let callback = move |event: Event| {
-    //     if let Ok(duration) = event.time.duration_since(previous_time) {
-    //         // println!("{:?}", duration);
-    //         let data = &mut data;
-    //         data.push_back(duration);
-    //         previous_time = event.time.clone();
-    //     }
-    // };
-
     let mut window = Window::new("", W, H, WindowOptions::default())?;
     let mut last_update = Instant::now();
 
@@ -72,10 +65,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut chart = ChartBuilder::on(&root)
             .margin(10)
             .set_all_label_area_size(30)
-            .caption(
-                "Monthly Average Temperate in Salt Lake City, UT",
-            ("sans-serif", 40),
-            )
             .build_cartesian_2d(0..250u128, 0f64..40f64)?;
 
         chart
@@ -100,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Ok(duration) = event.time.duration_since(previous_time) {
                         // println!("{:?}", duration);
                         if let Ok(mut data) = data.lock() {
-                            data.push_back(duration);
+                            data.push_back((event.time, duration));
                             if data.len() > BUFFER_SIZE {
                                 data.pop_front();
                             }
@@ -132,21 +121,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap();
 
                 let data_clone = data.lock().unwrap().clone();
-                let mut counter = Duration::from_millis(0);
-                let in_last_second: Vec<&Duration> = data_clone.iter().rev().take_while(move |&value| {
-                    counter += *value;
-                    counter < Duration::from_secs(1)
-                }).collect();
+                let now = SystemTime::now();
+                let in_last_second: Vec<&(SystemTime, Duration)> = data_clone
+                    .iter()
+                    .filter(|&(time, _)| {
+                        now.duration_since(time.clone()).unwrap() <= Duration::from_secs(1)
+                    })
+                    .collect();
                 window.set_title(format!("{} ticks", in_last_second.len()).borrow());
                 chart
                     .draw_series(LineSeries::new(
-                        data_clone
-                            .iter()
-                            .enumerate()
-                            .map(|(i, duration)| return (i as u128 % 1000, duration.as_micros() as f64 / 1000f64)),
+                        data_clone.iter().enumerate().map(|(i, (_, duration))| {
+                            return (i as u128 % 1000, duration.as_micros() as f64 / 1000f64);
+                        }),
                         RED,
                     ))
-                    .unwrap().label("toto");
+                    .unwrap()
+                    .label("toto");
             }
         }
 
